@@ -1,2 +1,2 @@
 # catawiki
-catawikiをスクレイピングしte
+catawikiをスクレイピングしてXserver上に保存する
