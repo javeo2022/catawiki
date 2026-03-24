@@ -8,7 +8,7 @@ import atexit
 import psutil
 import json
 from typing import Optional, Union, Any
-from bs4 import BeautifulSoup, element
+from bs4 import element
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
@@ -51,7 +51,6 @@ class SeleniumWrapper:
         logging.basicConfig(
             format="[%(asctime)s] %(levelname)s: %(message)s", level=log_level
         )
-        logger = logging.getLogger(__name__)
         self.timeout = timeout
         logger.info("SeleniumWrapper initialized")
         self.selenium_flg = False
@@ -150,7 +149,7 @@ class SeleniumWrapper:
         """
         Parameters:
         -----------
-        css_selector:遷移先のURL
+        css_selector:CSSセレクタ
         timeout:WebDriverWaitの最大待機秒数
 
         memo:
@@ -224,16 +223,16 @@ class SeleniumWrapper:
             prefs["download.default_directory"] = download_dir
             prefs["savefile.default_directory"] = download_dir
         # ユーザープロファイルフォルダに指定があったら
-        if user_data_dir != None:
+        if user_data_dir is not None:
             options.add_argument(f"--user-data-dir={user_data_dir}")
         # ヘッドレスモードの判定
-        if headless is True:
+        if headless:
             options.add_argument("--headless=new")
         # 画像を読み込むかの判定
-        if imagesEnabled is False:
+        if not imagesEnabled:
             options.add_argument("--blink-settings=imagesEnabled=false")
         # シークレットモードの判定
-        if incognito is True:
+        if incognito:
             options.add_argument("--incognito")
         # javascript無効かの判断
         if not enable_js:
@@ -414,7 +413,7 @@ class SeleniumWrapper:
                 break
             except (TimeoutException, WebDriverException) as e:
                 print(f"エラー発生: {e}")
-                if attempt < max_retries:
+                if attempt < max_retries - 1:
                     print(f"{COMMON_WAIT_SECONDS}秒待機してからリトライします...\n")
                     time.sleep(COMMON_WAIT_SECONDS)
                 else:
@@ -484,7 +483,7 @@ class SeleniumWrapper:
                 logger.error(
                     f"[Timeout] Element not clickable for input: timeout={timeout}"
                 )
-                return False
+            return False
         except Exception as e:
             if log_output:
                 logger.error(
@@ -739,7 +738,7 @@ class SeleniumWrapper:
             )
             while top < last_height:
                 top = top + step
-                self.driver.execute_script(f'window.scrollBy(0, "{str(step)}")')
+                self.driver.execute_script(f'window.scrollBy(0, {step})')
                 last_height = self.driver.execute_script(
                     "return document.body.scrollHeight"
                 )

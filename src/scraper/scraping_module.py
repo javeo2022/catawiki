@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import datetime, timedelta
 import logging
+import mysql.connector
 
 from selenium.webdriver.support import expected_conditions as EC
 from src.lib.selenium_wrapper import SeleniumWrapper
@@ -56,7 +57,7 @@ class CatawikiScraper(SeleniumWrapper):
         for url in category_urls:
             self.driver_open(enable_js=False, imagesEnabled=False)  # カテゴリーページはJavaScriptを使用していないため、JSと画像は無効化して高速化する
             self.selenium_page_load(url=url)
-            _ = self.selenium_click('#cookie_bar_agree_button > span.c-button__overlay.c-button__overlay--primary', timeout=3)  # クッキー同意のポップアップを閉じる
+            # _ = self.selenium_click('#cookie_bar_agree_button > span.c-button__overlay.c-button__overlay--primary', timeout=3)  # クッキー同意のポップアップを閉じる
             max_page_no = get_max_page_no(markup=self.driver.page_source)
             # ページ数が100を超える場合はサブカテゴリーに掘り下げてクロールする
             if max_page_no > 100:
@@ -69,8 +70,7 @@ class CatawikiScraper(SeleniumWrapper):
                         logging.warning(f'サブカテゴリーページURL:{sub_url} のページ数も100を超えています。締切日で分割してクロールします。最大ページ数:{sub_max_page_no}')                        
                         for days in range(7):
                             target_date = (datetime.now() + timedelta(days=days)).strftime('%Y%m%d')
-                            encoded_key = urlencode("filters[bidding_end_days][]").replace("%", "%25")
-                            days_url = update_query_param(sub_url, encoded_key, target_date)
+                            days_url = update_query_param(sub_url, "filters", f"bidding_end_days%5B%5D={target_date}")
                             self.selenium_page_load(url=days_url)
                             dys_max_page_no = get_max_page_no(markup=self.driver.page_source)
                             logging.info(f'サブカテゴリーページURL:{days_url} をクロールします。最大ページ数:{dys_max_page_no}')
@@ -137,12 +137,12 @@ class CatawikiScraper(SeleniumWrapper):
                 l.update_date {sort_order}
         """.strip()
         rows = self.db.fetch(sql)
-        item_urls = [row["item_url"] for row in rows]
+        item_urls = [str(row["item_url"]) for row in rows]
         self.driver_open(enable_js=False, imagesEnabled=False)  # 落札ページはJavaScriptを使用していないため、JSと画像は無効化して高速化する
         for i, url in enumerate(item_urls, start=1):
             # ページ遷移する※たまに白紙ページで止まるので3回までリロードする
             for _ in range(3):
-                ec =EC.presence_of_element_located(('css selector', '#__NEXT_DATA__'))
+                ec = EC.presence_of_element_located(('css selector', '#__NEXT_DATA__'))
                 if self.selenium_page_load(url=url, condition=ec):
                     break
                 logging.info(f'ページ読み込みエラーのためリロードします URL:{url}')
@@ -161,11 +161,14 @@ class CatawikiScraper(SeleniumWrapper):
                         # クエリ実行
                         self.db.execute(data.upsert_sql, asdict(data))
                         break
-                    except (self.db.mysql.connector.Error, Exception) as e:
+                    except (mysql.connector.Error, Exception) as e:
                         # 接続が切れた場合のみ再接続を試みる
                         print("DB接続が切断されたため再接続を試みます")
-                        self.db.reconnect() 
+                        self.db._ensure_cursor()
 
             if i % 10 == 0:
                 logging.info(f'落札ページのクロール進捗: {i}/{len(item_urls)} 件')
+            if i % 100 == 0:  # 100件ごとにドライバーを再起動してメモリを解放する
+                self.driver_close()
+                self.driver_open(enable_js=False, imagesEnabled=False)
         self.driver_close()
